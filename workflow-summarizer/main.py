@@ -17,6 +17,7 @@ from recorder import get_active_window, capture_screenshot
 from blocker import is_blocked
 from filter import filter_session
 from summarizer import generate_summary
+from skill_generator import generate_skill, save_skill
 
 
 def load_config(path: str) -> dict:
@@ -117,21 +118,30 @@ def main():
     intent = input("What are you working on? > ")
 
     # Record
+    print("\n[RECORDING]")
     actions = record_session(intent, config)
     save_json(actions, "output/raw.json")
 
     # Filter
+    print("\n[FILTERING]")
     filtered = filter_session(actions, intent, client)
     save_json(filtered, "output/filtered.json")
 
     # Summarize
+    print("\n[SUMMARIZING]")
     summary = generate_summary(filtered, intent, client)
     save_markdown(summary, "output/workflow.md")
+
+    # Generate skill
+    print("\n[GENERATING SKILL]")
+    skill_yaml = generate_skill(filtered, intent, client)
+    skill_path = save_skill(skill_yaml, intent, "output/skills")
 
     print(f"\nDone!")
     print(f"  Raw actions:  {len(actions)}")
     print(f"  Filtered:     {len(filtered)}")
     print(f"  Summary:      output/workflow.md")
+    print(f"  Skill:        {skill_path}")
 
 
 if __name__ == "__main__":
