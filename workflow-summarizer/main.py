@@ -1,9 +1,7 @@
 import json
 import os
 import sys
-import time
 import shutil
-from datetime import datetime
 
 import requests as http_requests
 
@@ -13,11 +11,12 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-16"
 
 from anthropic import Anthropic
 
-from recorder import get_active_window, capture_screenshot
+from recorder import capture_screenshot
 from blocker import is_blocked
 from filter import filter_session
 from summarizer import generate_summary
 from skill_generator import generate_skill, save_skill
+from hooks import start_event_hook, get_next_event, clear_events
 
 
 def load_config(path: str) -> dict:
@@ -51,47 +50,49 @@ def get_browser_events() -> list:
 
 def record_session(intent: str, config: dict) -> list:
     actions = []
-    last_hwnd = None
 
     print(f"Recording session. Intent: {intent}")
     print("Press Ctrl+C to stop.")
+    print("[MODE] Event-driven (no polling)")
     print("Make sure browser extension is installed and server.py is running.\n")
 
-    # Clear any stale browser events
+    # Clear stale events
+    clear_events()
     try:
         http_requests.delete('http://127.0.0.1:8000/events', timeout=1)
     except Exception:
         print("[WARN] Browser event server not running — browser events won't be captured")
 
+    start_event_hook()
+
     try:
         while True:
-            window = get_active_window()
+            event = get_next_event(timeout=1.0)
 
-            if window["hwnd"] != last_hwnd:
-                last_hwnd = window["hwnd"]
+            if event is None:
+                continue
 
-                if is_blocked(window["app"], window["title"], config):
-                    print(f"[BLOCKED] {window['app']} - {window['title'][:50]}")
-                    continue
+            if is_blocked(event["app"], event["title"], config):
+                print(f"[BLOCKED] {event['app']} - {event['title'][:50]}")
+                continue
 
-                screenshot_path = capture_screenshot(config["screenshot_dir"])
-                browser_events = get_browser_events()
+            screenshot_path = capture_screenshot(config["screenshot_dir"])
+            browser_events = get_browser_events()
 
-                action = {
-                    "type": "app_switch",
-                    "timestamp": datetime.now().isoformat(),
-                    "app": window["app"],
-                    "title": window["title"],
-                    "screenshot": screenshot_path,
-                    "browser_events": browser_events,
-                }
-                actions.append(action)
-                print(f"[CAPTURED] {window['app']} - {window['title'][:40]} ({len(browser_events)} browser events)")
-
-            time.sleep(config["polling_interval_ms"] / 1000)
+            action = {
+                "type": "app_switch",
+                "timestamp": event["timestamp"],
+                "app": event["app"],
+                "title": event["title"],
+                "exe_path": event.get("exe_path"),
+                "pid": event.get("pid"),
+                "screenshot": screenshot_path,
+                "browser_events": browser_events,
+            }
+            actions.append(action)
+            print(f"[CAPTURED] {event['app']} - {event['title'][:40]} ({len(browser_events)} browser events)")
 
     except KeyboardInterrupt:
-        # Grab any final browser events
         final_events = get_browser_events()
         if final_events and actions:
             actions[-1]["browser_events"].extend(final_events)
