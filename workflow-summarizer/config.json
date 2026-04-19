@@ -1,0 +1,7 @@
+{
+  "blocked_apps": ["1Password", "KeePass", "Bitwarden"],
+  "blocked_title_patterns": ["bank", "chase", "paypal", "password", "sign in"],
+  "anthropic_api_key": "",
+  "screenshot_dir": "output/screenshots",
+  "polling_interval_ms": 250
+}
