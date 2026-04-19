@@ -5,6 +5,8 @@ import time
 import shutil
 from datetime import datetime
 
+import requests as http_requests
+
 # Ensure stdout handles arbitrary Unicode on Windows consoles
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-16"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -37,12 +39,28 @@ def save_markdown(text: str, path: str):
         f.write(text)
 
 
+def get_browser_events() -> list:
+    try:
+        events = http_requests.get('http://127.0.0.1:8000/events', timeout=1).json()
+        http_requests.delete('http://127.0.0.1:8000/events', timeout=1)
+        return events
+    except Exception:
+        return []
+
+
 def record_session(intent: str, config: dict) -> list:
     actions = []
     last_hwnd = None
 
     print(f"Recording session. Intent: {intent}")
-    print("Press Ctrl+C to stop.\n")
+    print("Press Ctrl+C to stop.")
+    print("Make sure browser extension is installed and server.py is running.\n")
+
+    # Clear any stale browser events
+    try:
+        http_requests.delete('http://127.0.0.1:8000/events', timeout=1)
+    except Exception:
+        print("[WARN] Browser event server not running — browser events won't be captured")
 
     try:
         while True:
@@ -56,19 +74,27 @@ def record_session(intent: str, config: dict) -> list:
                     continue
 
                 screenshot_path = capture_screenshot(config["screenshot_dir"])
+                browser_events = get_browser_events()
 
                 action = {
+                    "type": "app_switch",
                     "timestamp": datetime.now().isoformat(),
                     "app": window["app"],
                     "title": window["title"],
                     "screenshot": screenshot_path,
+                    "browser_events": browser_events,
                 }
                 actions.append(action)
-                print(f"[CAPTURED] {window['app']} - {window['title'][:50]}")
+                print(f"[CAPTURED] {window['app']} - {window['title'][:40]} ({len(browser_events)} browser events)")
 
             time.sleep(config["polling_interval_ms"] / 1000)
 
     except KeyboardInterrupt:
+        # Grab any final browser events
+        final_events = get_browser_events()
+        if final_events and actions:
+            actions[-1]["browser_events"].extend(final_events)
+
         print(f"\nSession ended. Captured {len(actions)} actions.")
         return actions
 
