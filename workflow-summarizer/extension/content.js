@@ -49,13 +49,7 @@ function getElementInfo(el) {
 }
 
 function sendEvent(data) {
-  fetch('http://127.0.0.1:8000/event', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).catch(() => {
-    // Server not running, ignore silently
-  });
+  chrome.runtime.sendMessage({ type: 'BREADCRUMBS_EVENT', data });
 }
 
 document.addEventListener('click', (e) => {
