@@ -19,9 +19,11 @@ def generate_skill(filtered_actions: list, intent: str, client: Anthropic) -> st
             "type": action.get("type"),
             "timestamp": action.get("timestamp"),
             "app": action.get("app"),
-            "title": action.get("title")
+            "title": action.get("title"),
+            "app_type": action.get("app_type", "unknown"),
+            "event_source": action.get("event_source", "unknown"),
         })
-        for event in action.get("browser_events", []):
+        for event in action.get("dom_events", action.get("browser_events", [])):
             flat_actions.append({
                 "type": event.get("type"),
                 "timestamp": event.get("timestamp"),
@@ -70,13 +72,24 @@ steps:
     seconds: 1
 ```
 
+## Locator Types
+Actions may come from different sources — use the right action type:
+
+1. Browser/Electron (DOM selectors):
+   - action: click, selector: "#id" or "[aria-label='...']"
+
+2. Win32 UIA locators:
+   - action: uia_click, locator: "AutomationId:btnReply" or "Button:Name=Delete"
+   - app: "OUTLOOK.EXE"
+
 ## Rules
 1. Use the most specific selector available (prefer #id, [data-testid], [aria-label] over tag.class paths)
-2. Identify values that should be variables (things the user typed, selected, etc.)
-3. Add wait steps after navigation or form submission
-4. Add a description to each click explaining its purpose
-5. Skip redundant clicks (multiple clicks on same element)
-6. Output ONLY the YAML, no explanation or markdown fences
+2. For UIA events use the locator field, not selector
+3. Identify values that should be variables (things the user typed, selected, etc.)
+4. Add wait steps after navigation or form submission
+5. Add a description to each click explaining its purpose
+6. Skip redundant clicks (multiple clicks on same element)
+7. Output ONLY the YAML, no explanation or markdown fences
 """
         }]
     )

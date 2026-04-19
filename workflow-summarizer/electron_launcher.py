@@ -34,6 +34,14 @@ ELECTRON_APPS = {
         "paths": [
             r"C:\Users\{user}\AppData\Local\Programs\Notion\Notion.exe"
         ]
+    },
+    "olk.exe": {
+        "name": "Outlook (new)",
+        "port": 9226,
+        "paths": [
+            r"C:\Program Files\WindowsApps\Microsoft.OutlookForWindows_1.2025.413.100_x64__8wekyb3d8bbwe\olk.exe",
+            r"C:\Users\{user}\AppData\Local\Microsoft\WindowsApps\olk.exe"
+        ]
     }
 }
 

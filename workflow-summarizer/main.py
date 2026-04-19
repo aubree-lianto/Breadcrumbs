@@ -17,6 +17,23 @@ from filter import filter_session
 from summarizer import generate_summary
 from skill_generator import generate_skill, save_skill
 from hooks import start_event_hook, get_next_event, clear_events
+from electron_launcher import get_debug_port, ELECTRON_APPS
+from electron_capture import get_electron_events_sync
+from uia_capture import is_win32_app
+from click_hook import start_click_hook, get_click_events, clear_click_events
+
+BROWSER_APPS = ["opera.exe", "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe"]
+
+
+def get_app_type(app_name: str) -> str:
+    app_lower = app_name.lower()
+    if app_lower in BROWSER_APPS:
+        return "browser"
+    if app_lower in ELECTRON_APPS:
+        return "electron"
+    if is_win32_app(app_name):
+        return "win32"
+    return "unknown"
 
 
 def load_config(path: str) -> dict:
@@ -58,12 +75,14 @@ def record_session(intent: str, config: dict) -> list:
 
     # Clear stale events
     clear_events()
+    clear_click_events()
     try:
         http_requests.delete('http://127.0.0.1:8000/events', timeout=1)
     except Exception:
-        print("[WARN] Browser event server not running — browser events won't be captured")
+        print("[WARN] Browser event server not running — browser clicks won't be captured")
 
     start_event_hook()
+    start_click_hook()
 
     try:
         while True:
@@ -77,7 +96,23 @@ def record_session(intent: str, config: dict) -> list:
                 continue
 
             screenshot_path = capture_screenshot(config["screenshot_dir"])
-            browser_events = get_browser_events()
+
+            app_type = get_app_type(event["app"])
+            dom_events = []
+            event_source = app_type
+
+            if app_type == "browser":
+                dom_events = get_browser_events()
+            elif app_type == "electron":
+                port = get_debug_port(event["app"])
+                if port:
+                    try:
+                        dom_events = get_electron_events_sync(port)
+                    except Exception as e:
+                        print(f"[WARN] Electron capture failed: {e}")
+                        event_source = "electron_failed"
+            elif app_type == "win32":
+                dom_events = get_click_events()
 
             action = {
                 "type": "app_switch",
@@ -86,16 +121,24 @@ def record_session(intent: str, config: dict) -> list:
                 "title": event["title"],
                 "exe_path": event.get("exe_path"),
                 "pid": event.get("pid"),
+                "app_type": app_type,
+                "event_source": event_source,
                 "screenshot": screenshot_path,
-                "browser_events": browser_events,
+                "dom_events": dom_events,
             }
             actions.append(action)
-            print(f"[CAPTURED] {event['app']} - {event['title'][:40]} ({len(browser_events)} browser events)")
+            print(f"[CAPTURED] {event['app']} ({app_type}) - {event['title'][:35]} ({len(dom_events)} events)")
 
     except KeyboardInterrupt:
-        final_events = get_browser_events()
-        if final_events and actions:
-            actions[-1]["browser_events"].extend(final_events)
+        final_browser = get_browser_events()
+        final_clicks = get_click_events()
+
+        if actions:
+            app_type = actions[-1].get("app_type")
+            if app_type == "browser" and final_browser:
+                actions[-1]["dom_events"].extend(final_browser)
+            elif app_type == "win32" and final_clicks:
+                actions[-1]["dom_events"].extend(final_clicks)
 
         print(f"\nSession ended. Captured {len(actions)} actions.")
         return actions
