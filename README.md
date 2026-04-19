@@ -1,28 +1,43 @@
 # Breadcrumbs
 
-Breadcrumbs is a local workflow recorder that captures your app switches and browser clicks, filters out distractions using Claude AI, and generates a markdown summary + reusable automation skill from your session.
+Breadcrumbs is a local workflow recorder that captures your app switches and in-app actions, filters out distractions using Claude AI, and generates a markdown summary + reusable automation skill from your session.
 
 ## What it does
 
-1. **Records** — detects active window switches and captures screenshots; a browser extension captures DOM-level click events
-2. **Filters** — uses Claude to classify each action as on-path or drift based on your declared intent
+1. **Records** — detects app switches instantly via Windows event hooks (no polling); captures DOM clicks from browsers, Electron apps, and Win32 apps
+2. **Filters** — uses Claude to classify each action as on-path or drift based on your declared intent; drift screenshots are deleted
 3. **Summarizes** — generates a markdown workflow summary of what you actually did
 4. **Generates skills** — converts your filtered actions into an OpenClaw skill YAML for automation replay
+
+## Capture Sources
+
+| App Type | Examples | Method |
+|----------|----------|--------|
+| Browsers | Opera, Chrome, Edge | Browser extension (DOM selectors) |
+| Electron apps | VS Code, Discord, Notion | Chrome DevTools Protocol |
+| Win32 apps | Notepad, Word, Excel | Windows UI Automation |
+| New Outlook | olk.exe | Electron (requires debug launch) |
 
 ## Project Structure
 
 ```
 workflow-summarizer/
-├── main.py              # Entry point, session orchestration
-├── recorder.py          # Window detection, screenshot capture
-├── blocker.py           # Blocklist checking (app + title patterns)
-├── filter.py            # Claude API drift detection
-├── summarizer.py        # Markdown workflow summary generation
-├── skill_generator.py   # OpenClaw skill YAML generation
-├── server.py            # Flask HTTP server for browser extension events
-├── config.json          # API key, blocklists, settings (gitignored)
+├── main.py               # Entry point, unified session orchestration
+├── recorder.py           # Screenshot capture
+├── blocker.py            # Blocklist checking (app + title patterns)
+├── filter.py             # Claude API drift detection
+├── summarizer.py         # Markdown workflow summary generation
+├── skill_generator.py    # OpenClaw skill YAML generation
+├── server.py             # Flask HTTP server for browser extension events
+├── hooks.py              # Windows event hooks (instant app-switch detection)
+├── electron_launcher.py  # Launch Electron apps with DevTools debug port
+├── electron_capture.py   # Chrome DevTools Protocol DOM capture
+├── uia_capture.py        # Windows UI Automation for Win32 apps
+├── click_hook.py         # Global mouse hook + UIA element query
+├── setup_electron.py     # Helper to launch Electron apps with debug ports
+├── config.json           # API key, blocklists, settings (gitignored)
 ├── requirements.txt
-└── extension/           # Browser extension (Chrome/Opera)
+└── extension/            # Browser extension (Chrome/Opera)
     ├── manifest.json
     ├── content.js
     └── background.js
@@ -32,15 +47,15 @@ workflow-summarizer/
 
 ### 1. Install dependencies
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r workflow-summarizer/requirements.txt
+pip install -r workflow-summarizer\requirements.txt
 ```
 
 ### 2. Configure
 
-Copy and edit `config.json`:
+Create `workflow-summarizer/config.json`:
 
 ```json
 {
@@ -48,7 +63,7 @@ Copy and edit `config.json`:
   "blocked_title_patterns": ["bank", "chase", "paypal", "password", "sign in"],
   "anthropic_api_key": "sk-ant-...",
   "screenshot_dir": "output/screenshots",
-  "polling_interval_ms": 250
+  "capture_mode": "unified"
 }
 ```
 
@@ -58,32 +73,40 @@ Copy and edit `config.json`:
 2. Enable **Developer mode**
 3. Click **Load unpacked** → select the `workflow-summarizer/extension/` folder
 
-## Usage
+### 4. Launch Electron apps with debug ports (optional)
 
-### Terminal 1 — start the browser event server
+To capture clicks inside VS Code, Discord, Notion:
 
-```bash
-.venv\Scripts\python.exe workflow-summarizer\server.py
+```powershell
+cd workflow-summarizer
+& "..\venv\Scripts\python.exe" setup_electron.py
 ```
 
-### Terminal 2 — start recording
+Select an app to relaunch it with the DevTools debug port enabled.
 
-```bash
+## Usage
+
+**Terminal 1** — start the browser event server:
+```powershell
+& ".venv\Scripts\python.exe" workflow-summarizer\server.py
+```
+
+**Terminal 2** — start recording:
+```powershell
 cd workflow-summarizer
-..\venv\Scripts\activate
-python main.py
+& "..\venv\Scripts\python.exe" main.py
 ```
 
 Then:
-1. Type your intent when prompted (e.g. `create a github issue`)
-2. Work normally — switch apps, click in the browser
+1. Type your intent when prompted (e.g. `reply to email and update code`)
+2. Work normally — switch apps, click around
 3. Press **Ctrl+C** to stop recording
 
-### Output
+## Output
 
 | File | Description |
 |------|-------------|
-| `output/raw.json` | All captured actions (minus hard-blocked apps) |
+| `output/raw.json` | All captured actions with DOM/UIA events |
 | `output/filtered.json` | On-path actions only |
 | `output/workflow.md` | Claude-generated markdown summary |
 | `output/skills/<intent>.yaml` | OpenClaw automation skill |
@@ -91,7 +114,7 @@ Then:
 
 ## Blocklist
 
-Apps and window title patterns in `config.json` are always blocked — no screenshot taken, no API call made:
+Apps and window title patterns in `config.json` are always blocked — no screenshot, no API call:
 
 ```json
 "blocked_apps": ["1Password", "KeePass", "Bitwarden"],
