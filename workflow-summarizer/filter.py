@@ -13,16 +13,16 @@ def check_drift(action: dict, intent: str, recent_actions: list, client: Anthrop
             "role": "user",
             "content": f"""User's declared intent: "{intent}"
 
-Recent actions:
-{context}
+        Recent actions:
+        {context}
 
-Current action:
-- App: {action['app']}
-- Window: {action['title']}
+        Current action:
+        - App: {action['app']}
+        - Window: {action['title']}
 
-Is this action on-path (directly supporting the intent) or drift (distraction/unrelated)?
+        Is this action on-path (directly supporting the intent) or drift (distraction/unrelated)?
 
-Respond with exactly one word: ON-PATH or DRIFT"""
+        Respond with exactly one word: ON-PATH or DRIFT"""
         }]
     )
 
